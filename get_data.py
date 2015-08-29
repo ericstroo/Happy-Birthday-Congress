@@ -3,13 +3,15 @@ import urllib2
 import json
 import collections
 import mysql.connector
+from bs4 import BeautifulSoup
+
 
 #Construct the URL for the Sunlight Foundation API
 apikey = ''
 root = 'https://congress.api.sunlightfoundation.com/'
 method = 'legislators'
-qstring = '?per_page=all'
-url = root+method+qstring+'&apikey='+apikey
+qing = '?per_page=all'
+url = root+method+qing+'&apikey='+apikey
 
 #Send the request and process the result
 request = urllib2.Request(url)
@@ -69,3 +71,34 @@ def add_congress_member(single_congress_member):
 #Loop through and call add_congress_member
 for single_congress_member in congress_facts.values():
     add_congress_member(single_congress_member)
+
+sqla = ("""drop table if exists congress_bios""")
+
+sqlb = ("""create table congress_bios (
+    bioguide_id varchar(255),
+    bio_text blob,
+    img_src varchar(255),
+    PRIMARY KEY (bioguide_id))""")
+
+cursor.execute(sqla)
+cursor.execute(sqlb)
+
+def add_biography(bioguide_id):
+    bio_url = "http://bioguide.congress.gov/scripts/biodisplay.pl?index=" + bioguide_id
+    data = urllib2.urlopen(bio_url)
+    soup = BeautifulSoup(data)
+    bio = soup.find_all('p')
+    bio_text=str(bio)
+    photo_url="//bioguide.congress.gov/bioguide/photo"
+    for img_soup in soup.find_all('img'):
+        img_src = ""
+        img_str = str(img_soup)
+        if photo_url in img_str:
+            img_src="http:" + img_str[img_str.find('\"')+1:img_str.rfind('\"')]
+    cursor.execute("""INSERT INTO congress_bios(
+    bioguide_id,bio_text,img_src)
+    VALUES(%s, %s, %s)""", (bioguide_id,bio_text,img_src))
+    pass
+
+for bioguide_id in congress_facts.keys():
+    add_biography(bioguide_id)
